@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:web/web.dart' as web;
 import '../models/tap_models.dart';
 
 // Easy Auth provides authentication at the App Service platform level.
-// The Flutter app reads the session from /.auth/me and requests an API
-// token via /.auth/token – no MSAL library needed in the Flutter code.
+// The Flutter app reads the session from /.auth/me (user info + access token).
+// When unauthenticated, we redirect the browser to /.auth/login/aad.
 class AuthService extends ChangeNotifier {
   UserInfo? _currentUser;
   String? _accessToken;
@@ -13,16 +14,16 @@ class AuthService extends ChangeNotifier {
   UserInfo? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
 
-  // Call once at app startup.
   Future<void> initAsync() async {
     try {
       final meResponse = await http.get(Uri.parse('/.auth/me'));
       if (meResponse.statusCode == 200) {
         final data = jsonDecode(meResponse.body) as List<dynamic>;
         if (data.isNotEmpty) {
-          final claims =
-              (data[0]['user_claims'] as List<dynamic>?) ?? [];
+          final entry = data[0] as Map<String, dynamic>;
+          final claims = (entry['user_claims'] as List<dynamic>?) ?? [];
           _currentUser = UserInfo.fromClaims(claims);
+          _accessToken = entry['access_token'] as String?;
           notifyListeners();
         }
       }
@@ -31,26 +32,27 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  // Gets (or refreshes) the Bearer token for the API audience.
-  // Easy Auth stores the token in the server-side token store and issues it
-  // when the app calls /.auth/token.
   Future<String?> getAccessTokenAsync() async {
+    if (_accessToken != null) return _accessToken;
     try {
-      final response = await http.get(Uri.parse('/.auth/token'));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        _accessToken = data['access_token'] as String?;
-        return _accessToken;
-      }
+      await http.get(Uri.parse('/.auth/refresh'));
+      await initAsync();
+      return _accessToken;
     } catch (e) {
       debugPrint('AuthService.getAccessTokenAsync error: $e');
     }
     return null;
   }
 
+  void redirectToLogin() {
+    final redirectUrl = Uri.encodeFull(web.window.location.href);
+    web.window.location.replace('/.auth/login/aad?post_login_redirect_url=$redirectUrl');
+  }
+
   void signOut() {
     _currentUser = null;
     _accessToken = null;
     notifyListeners();
+    web.window.location.replace('/.auth/logout?post_logout_redirect_uri=/');
   }
 }

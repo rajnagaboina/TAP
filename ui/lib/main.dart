@@ -59,14 +59,12 @@ class _AppLoaderState extends State<_AppLoader> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    final isAuth = context.watch<AuthService>().isAuthenticated;
-    if (!isAuth) {
-      // Easy Auth will handle the redirect to Entra login.
-      // If somehow the user is not authenticated (local dev), show a message.
+    final auth = context.watch<AuthService>();
+    if (!auth.isAuthenticated) {
+      // Trigger browser redirect to Easy Auth login endpoint.
+      WidgetsBinding.instance.addPostFrameCallback((_) => auth.redirectToLogin());
       return const Scaffold(
-        body: Center(
-          child: Text('Redirecting to sign-in…'),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
     return const HomeScreen();
