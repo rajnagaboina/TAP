@@ -33,11 +33,11 @@ class TapResult {
   });
 
   factory TapResult.fromJson(Map<String, dynamic> json) => TapResult(
-        temporaryAccessPass: json['temporaryAccessPass'] as String,
-        lifetimeInMinutes: json['lifetimeInMinutes'] as int,
-        startDateTime: json['startDateTime'] != null
-            ? DateTime.parse(json['startDateTime'] as String)
+        temporaryAccessPass: (json['temporaryAccessPass'] ?? json['TemporaryAccessPass'] ?? '') as String,
+        lifetimeInMinutes: (json['lifetimeInMinutes'] ?? json['LifetimeInMinutes'] ?? 0) as int,
+        startDateTime: (json['startDateTime'] ?? json['StartDateTime']) != null
+            ? DateTime.parse((json['startDateTime'] ?? json['StartDateTime']) as String)
             : null,
-        isUsableOnce: json['isUsableOnce'] as bool? ?? true,
+        isUsableOnce: (json['isUsableOnce'] ?? json['IsUsableOnce'] ?? true) as bool,
       );
 }

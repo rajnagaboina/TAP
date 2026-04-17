@@ -31,7 +31,10 @@ builder.Services.AddScoped<IGraphService, GraphService>();
 builder.Services.AddApplicationInsightsTelemetry();
 
 // ── Controllers & OpenAPI ────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.PropertyNamingPolicy =
+            System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
