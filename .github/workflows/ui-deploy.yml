@@ -40,10 +40,6 @@ jobs:
             --dart-define=UI_CLIENT_ID="${{ vars.UI_CLIENT_ID }}" \
             --dart-define=API_CLIENT_ID="${{ vars.API_CLIENT_ID }}"
 
-      - name: List build output
-        working-directory: ui
-        run: ls -la build/web/ && echo "---assets---" && ls -la build/web/assets/ | head -20
-
       - name: Login to Azure (OIDC)
         uses: azure/login@v2
         with:

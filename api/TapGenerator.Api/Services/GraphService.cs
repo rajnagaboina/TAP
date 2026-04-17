@@ -78,10 +78,21 @@ public class GraphService : IGraphService
             IsUsableOnce = true,
         };
 
-        return await _graph.Users[userId]
+        var tap = await _graph.Users[userId]
             .Authentication
             .TemporaryAccessPassMethods
             .PostAsync(body, cancellationToken: ct)
             ?? throw new InvalidOperationException("Graph returned null TAP response.");
+
+        _log.LogInformation(
+            "Graph TAP raw response – Id: {Id}, PassIsNull: {PassNull}, PassLength: {PassLen}, Lifetime: {Lifetime}, StartDateTime: {Start}, IsUsableOnce: {Once}",
+            tap.Id,
+            tap.TemporaryAccessPass is null,
+            tap.TemporaryAccessPass?.Length ?? -1,
+            tap.LifetimeInMinutes,
+            tap.StartDateTime,
+            tap.IsUsableOnce);
+
+        return tap;
     }
 }
