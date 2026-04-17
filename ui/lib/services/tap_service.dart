@@ -30,12 +30,19 @@ class TapService {
     );
 
     Map<String, dynamic> body = {};
+    bool isJson = false;
     if (response.body.isNotEmpty) {
       try {
         body = jsonDecode(response.body) as Map<String, dynamic>;
-      } catch (_) {
-        // non-JSON response — body stays empty, raw text used in error messages
-      }
+        isJson = true;
+      } catch (_) {}
+    }
+
+    // If the server returned HTML instead of JSON the request hit the wrong endpoint.
+    if (!isJson && response.statusCode == 200) {
+      throw Exception(
+          'API returned non-JSON (HTML). URL called: ${AppConfig.tapEndpoint}\n'
+          'Check APIM_BASE_URL build variable. First 200 chars: ${response.body.substring(0, response.body.length.clamp(0, 200))}');
     }
 
     switch (response.statusCode) {
