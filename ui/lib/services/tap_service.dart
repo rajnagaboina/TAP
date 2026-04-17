@@ -29,7 +29,14 @@ class TapService {
       }),
     );
 
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    Map<String, dynamic> body = {};
+    if (response.body.isNotEmpty) {
+      try {
+        body = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {
+        // non-JSON response — body stays empty, raw text used in error messages
+      }
+    }
 
     switch (response.statusCode) {
       case 200:
@@ -37,15 +44,18 @@ class TapService {
       case 400:
         throw Exception(body['error'] ?? 'Invalid request.');
       case 401:
-        throw Exception('Session expired. Please reload the page to sign in.');
+        final msg = body['error'] ?? body['message'] ?? '';
+        throw Exception(
+            'Unauthorized (401)${msg.isNotEmpty ? ": $msg" : ""}. '
+            'Your token may be missing the TAP.Generator role or your session has expired.');
       case 403:
         throw Exception(
             body['error'] ?? 'Forbidden. You may lack the TAP.Generator role or the target user is privileged.');
       case 404:
         throw Exception(body['error'] ?? 'Target user not found.');
       default:
-        throw Exception(
-            'Unexpected error (${response.statusCode}): ${body['error'] ?? response.body}');
+        final detail = body['error'] ?? body['message'] ?? response.body;
+        throw Exception('Unexpected error (${response.statusCode}): $detail');
     }
   }
 }
