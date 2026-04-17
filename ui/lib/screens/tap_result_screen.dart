@@ -22,22 +22,33 @@ class _TapResultScreenState extends State<TapResultScreen> {
   bool _copied = false;
 
   Future<void> _copyToClipboard() async {
-    await Clipboard.setData(
-        ClipboardData(text: widget.result.temporaryAccessPass));
-    setState(() => _copied = true);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _copied = false);
-    });
+    try {
+      await Clipboard.setData(
+          ClipboardData(text: widget.result.temporaryAccessPass));
+      setState(() => _copied = true);
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _copied = false);
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Clipboard copy failed. Select the TAP text and copy manually.'),
+        ));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final expiresAt = widget.result.startDateTime != null
-        ? widget.result.startDateTime!
-            .add(Duration(minutes: widget.result.lifetimeInMinutes))
-        : DateTime.now().add(Duration(minutes: widget.result.lifetimeInMinutes));
+    final expiresAt = (widget.result.startDateTime != null
+            ? widget.result.startDateTime!
+                .add(Duration(minutes: widget.result.lifetimeInMinutes))
+            : DateTime.now()
+                .add(Duration(minutes: widget.result.lifetimeInMinutes)))
+        .toLocal();
 
-    final fmt = DateFormat('HH:mm:ss');
+    final fmt = DateFormat('dd MMM yyyy HH:mm (zzz)');
 
     return PopScope(
       canPop: true,
