@@ -29,6 +29,7 @@ class TapService {
       }),
     );
 
+    final contentType = response.headers['content-type'] ?? '';
     Map<String, dynamic> body = {};
     bool isJson = false;
     if (response.body.isNotEmpty) {
@@ -40,9 +41,19 @@ class TapService {
 
     // If the server returned HTML instead of JSON the request hit the wrong endpoint.
     if (!isJson && response.statusCode == 200) {
+      final snippet =
+          response.body.substring(0, response.body.length.clamp(0, 200));
+      if (response.body.isEmpty) {
+        throw Exception(
+            'API returned 200 with an empty body. URL called: ${AppConfig.tapEndpoint}\n'
+            'Content-Type: ${contentType.isEmpty ? "missing" : contentType}. '
+            'This is not a valid TAP response.');
+      }
+
       throw Exception(
-          'API returned non-JSON (HTML). URL called: ${AppConfig.tapEndpoint}\n'
-          'Check APIM_BASE_URL build variable. First 200 chars: ${response.body.substring(0, response.body.length.clamp(0, 200))}');
+          'API returned non-JSON response. URL called: ${AppConfig.tapEndpoint}\n'
+          'Content-Type: ${contentType.isEmpty ? "missing" : contentType}\n'
+          'First 200 chars: $snippet');
     }
 
     switch (response.statusCode) {
