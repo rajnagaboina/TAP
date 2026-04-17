@@ -66,22 +66,22 @@ public class TapController : ControllerBase
         {
             var tap = await _graph.CreateTapAsync(targetUser.Id!, request.LifetimeInMinutes, ct);
 
+            if (string.IsNullOrEmpty(tap.TemporaryAccessPass))
+            {
+                _log.LogError("Graph returned null/empty temporaryAccessPass for {Target}", request.TargetUpn);
+                return StatusCode(500, new { error = "TAP was created but the pass code was not returned by Microsoft Graph. Verify the Managed Identity has UserAuthenticationMethod.ReadWrite.All permission." });
+            }
+
             // NOTE: TAP value is intentionally NOT logged.
             _log.LogInformation("TAP created – target: {Target}, duration: {Mins}m, by: {Operator}",
                 request.TargetUpn, request.LifetimeInMinutes, operatorUpn);
 
-            if (string.IsNullOrEmpty(tap.TemporaryAccessPass))
-            {
-                _log.LogError("Graph returned a TAP with null/empty pass for {Target}. Check Managed Identity has UserAuthenticationMethod.ReadWrite.All.", request.TargetUpn);
-                return StatusCode(500, new { error = "TAP was created but the pass code was not returned by Microsoft Graph. Verify the Managed Identity has UserAuthenticationMethod.ReadWrite.All permission." });
-            }
-
             return Ok(new TapResponse
             {
                 TemporaryAccessPass = tap.TemporaryAccessPass,
-                LifetimeInMinutes   = tap.LifetimeInMinutes ?? request.LifetimeInMinutes,
+                LifetimeInMinutes   = tap.LifetimeInMinutes,
                 StartDateTime       = tap.StartDateTime,
-                IsUsableOnce        = tap.IsUsableOnce ?? true,
+                IsUsableOnce        = tap.IsUsableOnce,
             });
         }
         catch (ODataError ex)

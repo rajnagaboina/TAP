@@ -6,6 +6,7 @@ using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Models.ODataErrors;
+using TapGenerator.Api.Models;
 
 namespace TapGenerator.Api.Services;
 
@@ -29,8 +30,8 @@ public class GraphService : IGraphService
 
     public GraphService(GraphServiceClient graph, ILogger<GraphService> log, IHttpClientFactory httpFactory)
     {
-        _graph = graph;
-        _log = log;
+        _graph      = graph;
+        _log        = log;
         _httpFactory = httpFactory;
         _credential = new DefaultAzureCredential();
     }
@@ -75,45 +76,42 @@ public class GraphService : IGraphService
         }
     }
 
-    public async Task<TemporaryAccessPassAuthenticationMethod> CreateTapAsync(
+    public async Task<TapCreationResult> CreateTapAsync(
         string userId, int lifetimeInMinutes, CancellationToken ct = default)
     {
-        // Use raw HTTP to avoid Kiota backing-store deserialization stripping temporaryAccessPass.
         var token = await _credential.GetTokenAsync(
             new TokenRequestContext(["https://graph.microsoft.com/.default"]), ct);
 
-        var url = $"https://graph.microsoft.com/v1.0/users/{userId}/authentication/temporaryAccessPassMethods";
-        var payload = JsonSerializer.Serialize(new
-        {
-            lifetimeInMinutes,
-            isUsableOnce = true
-        });
+        var url     = $"https://graph.microsoft.com/v1.0/users/{userId}/authentication/temporaryAccessPassMethods";
+        var payload = JsonSerializer.Serialize(new { lifetimeInMinutes, isUsableOnce = true });
 
         using var http = _httpFactory.CreateClient();
-        using var req = new HttpRequestMessage(HttpMethod.Post, url);
+        using var req  = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
         req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
         using var resp = await http.SendAsync(req, ct);
         var raw = await resp.Content.ReadAsStringAsync(ct);
 
-        _log.LogInformation("Graph TAP raw JSON (status {Status}): {Body}", (int)resp.StatusCode, raw);
+        _log.LogInformation("Graph TAP HTTP {Status} – body: {Body}", (int)resp.StatusCode, raw);
 
         if (!resp.IsSuccessStatusCode)
         {
-            // Surface Graph errors back as ODataError-equivalent status codes
-            var statusCode = (int)resp.StatusCode;
             JsonDocument? errDoc = null;
             try { errDoc = JsonDocument.Parse(raw); } catch { }
-            var message = errDoc?.RootElement
-                .GetProperty("error").GetProperty("message").GetString() ?? raw;
-            throw new InvalidOperationException($"Graph {statusCode}: {message}");
+            var message = errDoc is not null &&
+                          errDoc.RootElement.TryGetProperty("error", out var errEl) &&
+                          errEl.TryGetProperty("message", out var msgEl)
+                ? msgEl.GetString() ?? raw
+                : raw;
+            throw new InvalidOperationException($"Graph {(int)resp.StatusCode}: {message}");
         }
 
-        using var doc = JsonDocument.Parse(raw);
+        using var doc  = JsonDocument.Parse(raw);
         var root = doc.RootElement;
 
         string? pass = root.TryGetProperty("temporaryAccessPass", out var passProp)
+                       && passProp.ValueKind != JsonValueKind.Null
             ? passProp.GetString()
             : null;
 
@@ -122,27 +120,18 @@ public class GraphService : IGraphService
             : lifetimeInMinutes;
 
         DateTimeOffset? startDt = root.TryGetProperty("startDateTime", out var startProp)
-            && startProp.ValueKind != JsonValueKind.Null
+                                  && startProp.ValueKind != JsonValueKind.Null
             ? DateTimeOffset.Parse(startProp.GetString()!)
             : null;
 
-        bool isUsableOnce = root.TryGetProperty("isUsableOnce", out var onceProp)
+        bool once = root.TryGetProperty("isUsableOnce", out var onceProp)
             ? onceProp.GetBoolean()
             : true;
 
-        string? id = root.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
-
         _log.LogInformation(
-            "Graph TAP parsed – Id: {Id}, PassIsNull: {PassNull}, PassLength: {PassLen}, Lifetime: {Lifetime}",
-            id, pass is null, pass?.Length ?? -1, lifetime);
+            "Graph TAP parsed – PassIsNull: {Null}, PassLength: {Len}, Lifetime: {Min}",
+            pass is null, pass?.Length ?? -1, lifetime);
 
-        return new TemporaryAccessPassAuthenticationMethod
-        {
-            Id = id,
-            TemporaryAccessPass = pass,
-            LifetimeInMinutes = lifetime,
-            StartDateTime = startDt,
-            IsUsableOnce = isUsableOnce,
-        };
+        return new TapCreationResult(pass, lifetime, startDt, once);
     }
 }
