@@ -85,13 +85,26 @@ public class GraphService : IGraphService
             ?? throw new InvalidOperationException("Graph returned null TAP response.");
 
         _log.LogInformation(
-            "Graph TAP raw response – Id: {Id}, PassIsNull: {PassNull}, PassLength: {PassLen}, Lifetime: {Lifetime}, StartDateTime: {Start}, IsUsableOnce: {Once}",
+            "Graph TAP raw response – Id: {Id}, PassIsNull: {PassNull}, PassLength: {PassLen}, Lifetime: {Lifetime}, StartDateTime: {Start}, IsUsableOnce: {Once}, AdditionalDataKeys: {Keys}",
             tap.Id,
             tap.TemporaryAccessPass is null,
             tap.TemporaryAccessPass?.Length ?? -1,
             tap.LifetimeInMinutes,
             tap.StartDateTime,
-            tap.IsUsableOnce);
+            tap.IsUsableOnce,
+            tap.AdditionalData != null ? string.Join(",", tap.AdditionalData.Keys) : "(none)");
+
+        // Kiota can sometimes put properties in AdditionalData instead of typed fields
+        // when the @odata.type in the response doesn't exactly match the registered discriminator.
+        if (string.IsNullOrEmpty(tap.TemporaryAccessPass) && tap.AdditionalData != null)
+        {
+            if (tap.AdditionalData.TryGetValue("temporaryAccessPass", out var passObj) &&
+                passObj is string passStr && !string.IsNullOrEmpty(passStr))
+            {
+                _log.LogInformation("Recovered temporaryAccessPass from AdditionalData for {Id}", tap.Id);
+                tap.TemporaryAccessPass = passStr;
+            }
+        }
 
         return tap;
     }
