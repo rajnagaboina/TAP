@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+
+# Flutter / Dart
+ui/build/
+ui/.dart_tool/
+ui/.flutter-plugins
+ui/.flutter-plugins-dependencies
+ui/.packages
+ui/pubspec.lock
+
+# Azure / Infra
+*.publishsettings
+infra/*.log
+
+# OS
+.DS_Store
+Thumbs.db

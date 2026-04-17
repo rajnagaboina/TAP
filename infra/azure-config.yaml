@@ -1,0 +1,126 @@
+# =============================================================================
+# azure-config.yaml  –  TAP Generator deployment configuration
+# Fill in every "" value before running CI/CD or any deployment step.
+# These values are referenced by GitHub Actions workflows and APIM policy.
+# =============================================================================
+
+azure:
+  tenantId: "ac1cd4e7-b14c-42dd-aac0-7543da3fb35f"              # e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  subscriptionId: ""                                             # e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  resourceGroup: "airg-platform-rg"         # e.g. rg-tap-generator-prod
+  location: "westus2"              # e.g. eastus | westeurope | australiaeast
+
+  # --------------------------------------------------------------------------
+  # UI App Service  (hosts Flutter Web + Easy Auth)
+  # --------------------------------------------------------------------------
+  uiAppService:
+    name: "App-Service-Plan-UI"                # e.g. app-tap-ui-prod
+    planName: ""            # e.g. asp-tap-ui-prod
+    planSku: "B1"           # B1 | B2 | S1 | P1v3  (Easy Auth requires B1+)
+    # Easy Auth is configured AFTER the app service exists in the portal:
+    #   Portal → App Service → Authentication → Add provider → Microsoft
+    #   Use the clientId from entra.uiAppRegistration.clientId below.
+    #   Additional login scopes: api://<entra.apiAppRegistration.clientId>/access_as_user
+    easyAuth:
+      clientId: "ba9431f0-539e-48d9-9893-75a21716d6ae"          # Same as entra.uiAppRegistration.clientId
+      issuerUrl: "https://login.microsoftonline.com/ac1cd4e7-b14c-42dd-aac0-7543da3fb35f/v2.0"         # https://login.microsoftonline.com/<tenantId>/v2.0
+
+  # --------------------------------------------------------------------------
+  # API App Service  (hosts .NET 8 API, system-assigned Managed Identity)
+  # --------------------------------------------------------------------------
+  apiAppService:
+    name: "asp-tap-generator-api"                # e.g. app-tap-api-prod
+    planName: ""            # e.g. asp-tap-api-prod
+    planSku: "B1"
+    # Enable system-assigned Managed Identity after creation:
+    #   Portal → App Service → Identity → System assigned → ON
+    managedIdentity:
+      objectId: "5906180b-d377-4856-aacf-1b09cba28655"           # System-assigned MI Object ID
+    # App Settings to configure in portal (or via pipeline):
+    #   AzureAd__TenantId       → azure.tenantId
+    #   AzureAd__Audience       → api://<entra.apiAppRegistration.clientId>
+    #   AzureAd__Instance       → https://login.microsoftonline.com/
+    #   AppInsights__ConnectionString → azure.appInsights.connectionString
+
+  # --------------------------------------------------------------------------
+  # API Management (enforces JWT + role, routes to API App Service)
+  # --------------------------------------------------------------------------
+  apim:
+    name: "apim-tap-prod"
+    publisherEmail: "rajnagaboina1982@gmail.com"
+    publisherName: "IAM Platform Team"
+    sku: "Consumption"
+    gatewayUrl: "https://apim-tap-prod.azure-api.net"
+
+  # --------------------------------------------------------------------------
+  # Observability
+  # --------------------------------------------------------------------------
+  appInsights:
+    name: "tap"                # e.g. appi-tap-prod
+    connectionString: "InstrumentationKey=9e1cf43c-8815-44d6-90f5-6815042f5f80;IngestionEndpoint=https://westus2-2.in.applicationinsights.azure.com/;LiveEndpoint=https://westus2.livediagnostics.monitor.azure.com/;ApplicationId=e44f3b3c-da9a-4c5f-8b4a-661a1b105fbd"    # Fill in after creation (Settings → Connection String)
+    logAnalyticsWorkspace:
+      name: "agentai-law"              # e.g. law-tap-prod
+      resourceId: ""        # /subscriptions/.../resourceGroups/.../workspaces/...
+
+# =============================================================================
+# Entra (Azure AD) resources
+# =============================================================================
+entra:
+  tenantId: "ac1cd4e7-b14c-42dd-aac0-7543da3fb35f"              # Same as azure.tenantId
+
+  # --------------------------------------------------------------------------
+  # UI App Registration  (operators sign in through this)
+  # --------------------------------------------------------------------------
+  uiAppRegistration:
+    displayName: "TAP Generator UI"
+    clientId: "ba9431f0-539e-48d9-9893-75a21716d6ae"            # Application (client) ID – after registration
+    # Redirect URIs to add (in portal → Authentication → Web):
+    #   https://<uiAppService.name>.azurewebsites.net/.auth/login/aad/callback
+    # Implicit grant: NOT required (we use auth-code + PKCE via Easy Auth)
+    # API Permissions to grant (delegated):
+    #   Microsoft Graph: openid, profile, email
+    #   TAP Generator API: access_as_user  (api://<apiAppRegistration.clientId>/access_as_user)
+    # App Roles (define in Manifest → appRoles):
+    #   - value: TAP.Generator
+    #     displayName: TAP Generator Operator
+    #     allowedMemberTypes: [ User ]
+    #     description: Grants permission to generate TAPs for non-privileged users
+
+  # --------------------------------------------------------------------------
+  # API App Registration  (backend validates tokens against this)
+  # --------------------------------------------------------------------------
+  apiAppRegistration:
+    displayName: "TAP Generator API"
+    clientId: "6b1a0438-1405-45dc-a09c-d3282d41e37c"            # Application (client) ID – after registration
+    appIdUri: "api://6b1a0438-1405-45dc-a09c-d3282d41e37c"            # api://<clientId>  (set under Expose an API)
+    # Expose an API:
+    #   Application ID URI: api://<clientId>
+    #   Scope: access_as_user  (who can consent: Admins and users)
+    # Manifest – set "accessTokenAcceptedVersion": 2
+
+  # --------------------------------------------------------------------------
+  # Security group  (assign TAP.Generator app-role to this group)
+  # --------------------------------------------------------------------------
+  operatorsGroup:
+    displayName: "SG-IAM-TAP-Generators"
+    objectId: "d7e09499-ac05-4053-b4d0-2f0f71822976"            # After creating the group in Entra → Groups
+    # After creating group:
+    #   Enterprise Applications → TAP Generator UI → Users and groups
+    #   → Add user/group → select SG-IAM-TAP-Generators → select role TAP.Generator
+
+# =============================================================================
+# GitHub Actions variables  (Settings → Secrets and variables → Actions)
+# =============================================================================
+# Repository VARIABLES (not secrets, safe to show in logs):
+#   TENANT_ID              → entra.tenantId
+#   UI_CLIENT_ID           → entra.uiAppRegistration.clientId
+#   API_CLIENT_ID          → entra.apiAppRegistration.clientId
+#   APIM_BASE_URL          → azure.apim.gatewayUrl
+#   UI_APP_SERVICE_NAME    → azure.uiAppService.name
+#   API_APP_SERVICE_NAME   → azure.apiAppService.name
+#   RESOURCE_GROUP         → azure.resourceGroup
+#   APP_INSIGHTS_CONN_STR  → azure.appInsights.connectionString
+#
+# Repository SECRETS (never put in logs):
+#   UI_PUBLISH_PROFILE     → Download from portal: UI App Service → Get publish profile
+#   API_PUBLISH_PROFILE    → Download from portal: API App Service → Get publish profile
