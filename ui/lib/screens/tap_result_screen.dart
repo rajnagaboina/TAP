@@ -102,57 +102,67 @@ class _TapResultScreenState extends State<TapResultScreen> {
                               const Icon(Icons.warning_amber_outlined,
                                   size: 18, color: Colors.amber),
                               const SizedBox(width: 6),
-                              Text(
-                                'Show this to the user once – it will not be shown again.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                        color: Colors.amber.shade800,
-                                        fontWeight: FontWeight.bold),
+                              Expanded(
+                                child: Text(
+                                  'Show this to the user once – it will not be shown again.',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          color: Colors.amber.shade800,
+                                          fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 16),
-                          Center(
-                            child: GestureDetector(
-                              onTap: () =>
-                                  setState(() => _revealed = !_revealed),
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 200),
-                                child: _revealed
-                                    ? SelectableText(
-                                        widget.result.temporaryAccessPass,
-                                        key: const ValueKey('revealed'),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .displaySmall
-                                            ?.copyWith(
-                                                letterSpacing: 6,
-                                                fontWeight: FontWeight.bold),
-                                        textAlign: TextAlign.center,
-                                      )
-                                    : Text(
-                                        '•' * widget.result.temporaryAccessPass.length,
-                                        key: const ValueKey('hidden'),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .displaySmall
-                                            ?.copyWith(letterSpacing: 6),
-                                        textAlign: TextAlign.center,
-                                      ),
+                          if (widget.result.temporaryAccessPass.isEmpty)
+                            Center(
+                              child: Text(
+                                'TAP code unavailable – check API logs.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: Colors.red.shade700),
+                              ),
+                            )
+                          else ...[
+                            Center(
+                              child: _revealed
+                                  ? SelectableText(
+                                      widget.result.temporaryAccessPass,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .displaySmall
+                                          ?.copyWith(
+                                              letterSpacing: 6,
+                                              fontWeight: FontWeight.bold),
+                                      textAlign: TextAlign.center,
+                                    )
+                                  : Text(
+                                      '•' *
+                                          widget.result.temporaryAccessPass
+                                              .length,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .displaySmall
+                                          ?.copyWith(letterSpacing: 6),
+                                      textAlign: TextAlign.center,
+                                    ),
+                            ),
+                            const SizedBox(height: 12),
+                            Center(
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    setState(() => _revealed = !_revealed),
+                                icon: Icon(_revealed
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined),
+                                label:
+                                    Text(_revealed ? 'Hide TAP' : 'Reveal TAP'),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Center(
-                            child: Text(
-                              _revealed
-                                  ? 'Tap to hide'
-                                  : 'Tap to reveal',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
