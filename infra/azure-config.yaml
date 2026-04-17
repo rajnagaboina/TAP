@@ -30,6 +30,7 @@ azure:
   # --------------------------------------------------------------------------
   apiAppService:
     name: "asp-tap-generator-api"                # e.g. app-tap-api-prod
+    hostname: "asp-tap-generator-api-esfafpasfgg0bkbt.westus2-01.azurewebsites.net"
     planName: ""            # e.g. asp-tap-api-prod
     planSku: "B1"
     # Enable system-assigned Managed Identity after creation:

@@ -1,19 +1,11 @@
 <!--
-  APIM Inbound Policy – TAP Generator API
-  Apply this at the API level (not product/global level).
-
-  Before applying, replace every {{PLACEHOLDER}} with real values
-  from your azure-config.yaml, or set APIM Named Values for them:
-    tenant-id      → entra.tenantId
-    api-client-id  → entra.apiAppRegistration.clientId
-    ui-origin      → https://<uiAppService.name>.azurewebsites.net
-    api-backend    → https://<apiAppService.name>.azurewebsites.net
+  APIM Operation Policy – TAP Generator API > Generate TAP
+  Apply at the operation level (Generate TAP), not at the API/global level.
+  "All operations" policy should only contain the CORS block (handles OPTIONS preflight).
 -->
 <policies>
   <inbound>
     <base />
-
-    <!-- 1. Validate JWT issued by Entra, check TAP.Generator role -->
     <validate-jwt
         header-name="Authorization"
         failed-validation-httpcode="401"
@@ -22,6 +14,7 @@
         require-signed-tokens="true">
       <openid-config url="https://login.microsoftonline.com/ac1cd4e7-b14c-42dd-aac0-7543da3fb35f/v2.0/.well-known/openid-configuration" />
       <audiences>
+        <audience>6b1a0438-1405-45dc-a09c-d3282d41e37c</audience>
         <audience>api://6b1a0438-1405-45dc-a09c-d3282d41e37c</audience>
       </audiences>
       <issuers>
@@ -34,38 +27,10 @@
         </claim>
       </required-claims>
     </validate-jwt>
-
-    <!-- 2. CORS – allow only the UI origin -->
-    <cors allow-credentials="true">
-      <allowed-origins>
-        <origin>https://tap-gvfqfhc9g5chceg4.westus2-01.azurewebsites.net</origin>
-      </allowed-origins>
-      <allowed-methods preflight-result-max-age="300">
-        <method>POST</method>
-        <method>OPTIONS</method>
-      </allowed-methods>
-      <allowed-headers>
-        <header>Authorization</header>
-        <header>Content-Type</header>
-        <header>X-Request-Id</header>
-      </allowed-headers>
-      <expose-headers>
-        <header>X-Request-Id</header>
-      </expose-headers>
-    </cors>
-
-    <!-- 3. Route to the API App Service backend -->
-    <set-backend-service base-url="https://asp-tap-generator-api.azurewebsites.net" />
-
-    <!-- 4. Inject correlation ID for end-to-end tracing -->
+    <set-backend-service base-url="https://asp-tap-generator-api-esfafpasfgg0bkbt.westus2-01.azurewebsites.net" />
     <set-header name="X-Request-Id" exists-action="skip">
       <value>@(Guid.NewGuid().ToString())</value>
     </set-header>
-
-    <!-- 5. Strip Authorization from backend call if using MI-to-MI;
-         Remove this line if the .NET API also validates the Bearer token -->
-    <!-- <set-header name="Authorization" exists-action="delete" /> -->
-
   </inbound>
 
   <backend>
@@ -74,7 +39,6 @@
 
   <outbound>
     <base />
-    <!-- Remove server identity headers -->
     <set-header name="X-Powered-By" exists-action="delete" />
     <set-header name="X-AspNet-Version" exists-action="delete" />
     <set-header name="Server" exists-action="delete" />
@@ -82,12 +46,18 @@
 
   <on-error>
     <base />
+    <set-header name="Access-Control-Allow-Origin" exists-action="override">
+      <value>https://tap-gvfqfhc9g5chceg4.westus2-01.azurewebsites.net</value>
+    </set-header>
+    <set-header name="Access-Control-Allow-Credentials" exists-action="override">
+      <value>true</value>
+    </set-header>
     <return-response>
-      <set-status code="@((int)context.LastError.StatusCode)" reason="@(context.LastError.Reason)" />
+      <set-status code="@(context.Response.StatusCode)" reason="@(context.Response.StatusReason)" />
       <set-header name="Content-Type" exists-action="override">
         <value>application/json</value>
       </set-header>
-      <set-body>@($"{{\"error\": \"{context.LastError.Message}\"}}")</set-body>
+      <set-body>@(new JObject(new JProperty("error", context.LastError.Message)).ToString())</set-body>
     </return-response>
   </on-error>
 </policies>

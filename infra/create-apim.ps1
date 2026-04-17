@@ -8,7 +8,7 @@ $apimSku         = "Consumption"   # Instant provisioning; upgrade to Developer/
 $tenantId        = "ac1cd4e7-b14c-42dd-aac0-7543da3fb35f"
 $apiClientId     = "6b1a0438-1405-45dc-a09c-d3282d41e37c"
 $uiOrigin        = "https://tap-gvfqfhc9g5chceg4.westus2-01.azurewebsites.net"
-$apiBackend      = "https://asp-tap-generator-api.azurewebsites.net"
+$apiBackend      = "https://asp-tap-generator-api-esfafpasfgg0bkbt.westus2-01.azurewebsites.net"
 
 $apiId           = "tap-generator"
 $apiPath         = "tap"
