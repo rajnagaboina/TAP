@@ -24,6 +24,9 @@ builder.Services.AddSingleton<GraphServiceClient>(_ =>
     return new GraphServiceClient(credential, ["https://graph.microsoft.com/.default"]);
 });
 
+// ── HTTP client factory (used by GraphService for raw Graph calls) ────────────
+builder.Services.AddHttpClient();
+
 // ── Application services ─────────────────────────────────────────────────────
 builder.Services.AddScoped<IGraphService, GraphService>();
 

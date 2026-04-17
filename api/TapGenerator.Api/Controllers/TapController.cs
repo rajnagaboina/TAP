@@ -86,7 +86,7 @@ public class TapController : ControllerBase
         }
         catch (ODataError ex)
         {
-            _log.LogError(ex, "Graph error creating TAP for {Target}", request.TargetUpn);
+            _log.LogError(ex, "Graph OData error creating TAP for {Target}", request.TargetUpn);
 
             return ex.ResponseStatusCode switch
             {
@@ -94,6 +94,16 @@ public class TapController : ControllerBase
                 403 => StatusCode(403, new { error = "Managed Identity lacks UserAuthenticationMethod.ReadWrite.All permission." }),
                 _   => StatusCode(500, new { error = "An unexpected error occurred." })
             };
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogError(ex, "Graph HTTP error creating TAP for {Target}", request.TargetUpn);
+            var msg = ex.Message;
+            if (msg.StartsWith("Graph 400:"))
+                return BadRequest(new { error = "Graph rejected the TAP request. A TAP may already exist for this user.", detail = msg });
+            if (msg.StartsWith("Graph 403:"))
+                return StatusCode(403, new { error = "Managed Identity lacks UserAuthenticationMethod.ReadWrite.All permission." });
+            return StatusCode(500, new { error = msg });
         }
     }
 }
