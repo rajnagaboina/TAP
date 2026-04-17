@@ -62,6 +62,16 @@ builder.Services.AddSwaggerGen(c =>
     if (File.Exists(xmlPath)) c.IncludeXmlComments(xmlPath);
 });
 
+// ── CORS ─────────────────────────────────────────────────────────────────────
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins("https://tap-gvfqfhc9g5chceg4.westus2-01.azurewebsites.net")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials());
+});
+
 // ── Health checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
 
@@ -75,6 +85,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
