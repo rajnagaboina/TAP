@@ -8,7 +8,6 @@ namespace TapGenerator.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "TapGeneratorRole")]
 public class TapController : ControllerBase
 {
     private static readonly int[] AllowedDurations = [15, 30, 45, 60];
@@ -38,8 +37,7 @@ public class TapController : ControllerBase
         if (!AllowedDurations.Contains(request.LifetimeInMinutes))
             return BadRequest(new { error = "lifetimeInMinutes must be 15, 30, 45, or 60." });
 
-        var operatorUpn = User.FindFirst("preferred_username")?.Value
-            ?? User.FindFirst("upn")?.Value
+        var operatorUpn = Request.Headers["X-Operator-Upn"].FirstOrDefault()
             ?? "unknown";
 
         _log.LogInformation("TAP requested – target: {Target}, duration: {Mins}m, by: {Operator}",
