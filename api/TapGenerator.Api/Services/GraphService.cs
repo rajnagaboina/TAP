@@ -1,6 +1,7 @@
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Models.ODataErrors;
+using Microsoft.Kiota.Abstractions.Serialization;
 
 namespace TapGenerator.Api.Services;
 
@@ -84,27 +85,37 @@ public class GraphService : IGraphService
             .PostAsync(body, cancellationToken: ct)
             ?? throw new InvalidOperationException("Graph returned null TAP response.");
 
+        // Try to recover pass from AdditionalData — Kiota v1 backing store can store string
+        // properties as UntypedString wrappers, causing Get<string?>() to return null even
+        // when Graph returned a value.
+        if (string.IsNullOrEmpty(tap.TemporaryAccessPass) && tap.AdditionalData != null)
+        {
+            if (tap.AdditionalData.TryGetValue("temporaryAccessPass", out var passObj))
+            {
+                var passStr = passObj switch
+                {
+                    string s                => s,
+                    UntypedString u         => u.GetValue(),
+                    UntypedNode n           => n.GetValue()?.ToString(),
+                    _                       => passObj?.ToString()
+                };
+                if (!string.IsNullOrEmpty(passStr))
+                {
+                    _log.LogInformation(
+                        "Recovered temporaryAccessPass from AdditionalData (type {Type}) for TAP {Id}",
+                        passObj?.GetType().Name, tap.Id);
+                    tap.TemporaryAccessPass = passStr;
+                }
+            }
+        }
+
         _log.LogInformation(
-            "Graph TAP raw response – Id: {Id}, PassIsNull: {PassNull}, PassLength: {PassLen}, Lifetime: {Lifetime}, StartDateTime: {Start}, IsUsableOnce: {Once}, AdditionalDataKeys: {Keys}",
+            "Graph TAP response – Id: {Id}, PassIsNull: {PassNull}, PassLength: {PassLen}, Lifetime: {Lifetime}, AdditionalDataKeys: [{Keys}]",
             tap.Id,
             tap.TemporaryAccessPass is null,
             tap.TemporaryAccessPass?.Length ?? -1,
             tap.LifetimeInMinutes,
-            tap.StartDateTime,
-            tap.IsUsableOnce,
-            tap.AdditionalData != null ? string.Join(",", tap.AdditionalData.Keys) : "(none)");
-
-        // Kiota can sometimes put properties in AdditionalData instead of typed fields
-        // when the @odata.type in the response doesn't exactly match the registered discriminator.
-        if (string.IsNullOrEmpty(tap.TemporaryAccessPass) && tap.AdditionalData != null)
-        {
-            if (tap.AdditionalData.TryGetValue("temporaryAccessPass", out var passObj) &&
-                passObj is string passStr && !string.IsNullOrEmpty(passStr))
-            {
-                _log.LogInformation("Recovered temporaryAccessPass from AdditionalData for {Id}", tap.Id);
-                tap.TemporaryAccessPass = passStr;
-            }
-        }
+            tap.AdditionalData != null ? string.Join(", ", tap.AdditionalData.Keys) : "none");
 
         return tap;
     }
