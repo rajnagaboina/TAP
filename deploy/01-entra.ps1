@@ -69,10 +69,33 @@ if (-not $scopeExists) {
 # Create service principal if missing
 $apiSp = az ad sp show --id $API_CLIENT_ID 2>$null | ConvertFrom-Json
 if (-not $apiSp) {
-    az ad sp create --id $API_CLIENT_ID | Out-Null
+    $apiSp = az ad sp create --id $API_CLIENT_ID | ConvertFrom-Json
     Write-OK "Service principal created"
 } else {
     Write-OK "Service principal already exists"
+}
+
+# Add TAP.Generator app role to API app registration so the role claim appears
+# in access tokens issued for api://{API_CLIENT_ID} — required for APIM validate-jwt
+$existingApiRoles = az ad app show --id $API_CLIENT_ID --query "appRoles" | ConvertFrom-Json
+$apiRoleExists = $existingApiRoles | Where-Object { $_.value -eq "TAP.Generator" }
+if (-not $apiRoleExists) {
+    $apiRoleId = [guid]::NewGuid().ToString()
+    $apiRoleJson = @(
+        @{
+            allowedMemberTypes = @("User")
+            description        = "Grants permission to generate TAPs for non-privileged users"
+            displayName        = "TAP Generator Operator"
+            id                 = $apiRoleId
+            isEnabled          = $true
+            value              = "TAP.Generator"
+        }
+    ) | ConvertTo-Json -Depth 5 -Compress
+    az ad app update --id $API_CLIENT_ID --app-roles $apiRoleJson | Out-Null
+    Write-OK "TAP.Generator role added to API app registration (id: $apiRoleId)"
+} else {
+    $apiRoleId = $apiRoleExists.id
+    Write-OK "TAP.Generator role already on API app registration"
 }
 
 # ── 2. UI App Registration ────────────────────────────────────────────────────
@@ -154,18 +177,34 @@ if ($group.Count -eq 0) {
 }
 $GROUP_OBJECT_ID = $group.id
 
-# Assign TAP.Generator role to the group via Enterprise App (UI service principal)
+# Assign TAP.Generator role to the group via UI service principal (for id_token)
 $uiSpId = $uiSp.id
-$existing = az rest --method GET `
+$existingUi = az rest --method GET `
     --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$uiSpId/appRoleAssignedTo" `
     --query "value[?appRoleId=='$roleId']" 2>$null | ConvertFrom-Json
-if (-not $existing -or $existing.Count -eq 0) {
+if (-not $existingUi -or $existingUi.Count -eq 0) {
     az rest --method POST `
         --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$uiSpId/appRoleAssignedTo" `
         --body "{`"principalId`":`"$GROUP_OBJECT_ID`",`"resourceId`":`"$uiSpId`",`"appRoleId`":`"$roleId`"}" | Out-Null
-    Write-OK "TAP.Generator role assigned to $OPERATORS_GROUP"
+    Write-OK "TAP.Generator role assigned to $OPERATORS_GROUP (UI SP)"
 } else {
-    Write-OK "Role assignment already exists"
+    Write-OK "Role assignment already exists (UI SP)"
+}
+
+# Assign TAP.Generator role to the group via API service principal (for access_token)
+# APIM validates access tokens with audience=api://API_CLIENT_ID — the role must be
+# assigned on the API SP for the claim to appear in those tokens.
+$apiSpId = $apiSp.id
+$existingApi = az rest --method GET `
+    --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$apiSpId/appRoleAssignedTo" `
+    --query "value[?appRoleId=='$apiRoleId']" 2>$null | ConvertFrom-Json
+if (-not $existingApi -or $existingApi.Count -eq 0) {
+    az rest --method POST `
+        --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$apiSpId/appRoleAssignedTo" `
+        --body "{`"principalId`":`"$GROUP_OBJECT_ID`",`"resourceId`":`"$apiSpId`",`"appRoleId`":`"$apiRoleId`"}" | Out-Null
+    Write-OK "TAP.Generator role assigned to $OPERATORS_GROUP (API SP)"
+} else {
+    Write-OK "Role assignment already exists (API SP)"
 }
 
 # ── 4. UI App client secret (used by Easy Auth) ───────────────────────────────

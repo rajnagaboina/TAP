@@ -98,7 +98,6 @@ $redirectUri = "https://$UI_HOSTNAME/.auth/login/aad/callback"
 $existingUris = az ad app show --id $UI_CLIENT_ID --query "web.redirectUris" | ConvertFrom-Json
 if ($existingUris -notcontains $redirectUri) {
     $allUris = @($existingUris) + $redirectUri
-    $urisJson = $allUris | ConvertTo-Json -Compress
     az ad app update --id $UI_CLIENT_ID --web-redirect-uris $allUris | Out-Null
     Write-OK "Redirect URI added: $redirectUri"
 } else {
@@ -118,7 +117,7 @@ $easyAuthConfig = @{
     platform = @{ enabled = $true }
     globalValidation = @{
         requireAuthentication       = $true
-        unauthenticatedClientAction = "RedirectToLoginPage"
+        unauthenticatedClientAction = "AllowAnonymous"
     }
     identityProviders = @{
         azureActiveDirectory = @{
