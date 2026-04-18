@@ -151,22 +151,7 @@ $easyAuthEnabled = $authSettings.properties.platform.enabled
 if ($easyAuthEnabled) { Write-OK "Easy Auth enabled on $UI_APP_NAME" }
 else { Write-Fail "Easy Auth NOT enabled on $UI_APP_NAME – run 03-configure.ps1" }
 
-# ── 9. GitHub Variables ───────────────────────────────────────────────────────
-Write-Step "GitHub Actions Variables"
-$ghVars = gh variable list --repo $GITHUB_REPO --json name,value | ConvertFrom-Json
-$ghVarMap = @{}
-$ghVars | ForEach-Object { $ghVarMap[$_.name] = $_.value }
-
-foreach ($v in @("APIM_BASE_URL","API_CLIENT_ID","UI_CLIENT_ID","TENANT_ID","AZURE_CLIENT_ID")) {
-    if ($ghVarMap[$v]) { Write-OK "$v = $($ghVarMap[$v].Substring(0, [Math]::Min(40,$ghVarMap[$v].Length)))..." }
-    else { Write-Fail "GitHub variable missing: $v" }
-}
-
-# Validate APIM_BASE_URL matches actual gateway
-if ($ghVarMap["APIM_BASE_URL"] -eq $APIM_GATEWAY) { Write-OK "APIM_BASE_URL matches gateway" }
-else { Write-Warn "APIM_BASE_URL '$($ghVarMap["APIM_BASE_URL"])' != gateway '$APIM_GATEWAY'" }
-
-# ── 10. UI loads ──────────────────────────────────────────────────────────────
+# ── 9. UI App Service responds ────────────────────────────────────────────────
 Write-Step "UI App Service responds"
 try {
     $ui = Invoke-WebRequest "https://$UI_HOSTNAME" -UseBasicParsing -TimeoutSec 15

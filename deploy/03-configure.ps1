@@ -1,16 +1,20 @@
 # =============================================================================
 # 03-configure.ps1  –  Configure App Services, Managed Identity, Easy Auth,
-#                      Graph permissions, APIM policies, GitHub variables.
+#                      Graph permissions, APIM policies.
 #
 # Prerequisites:
 #   - 01-entra.ps1 and 02-azure.ps1 completed
-#   - az cli + gh cli logged in
-#   - gh auth login  (GitHub CLI)
+#   - az cli logged in
 #
 # Run time: ~3 minutes
 # Safe to re-run.
 # =============================================================================
 . "$PSScriptRoot\config.ps1"
+
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$UI_CLIENT_SECRET   # from 01-entra.ps1 output
+)
 
 function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-OK($msg)   { Write-Host "    OK: $msg" -ForegroundColor Green }
@@ -101,19 +105,28 @@ if ($existingUris -notcontains $redirectUri) {
     Write-OK "Redirect URI already present"
 }
 
+# Store client secret as an app setting so Easy Auth can read it without it
+# appearing in the JSON config (clientSecretSettingName references the setting name)
+az webapp config appsettings set `
+    --name $UI_APP_NAME `
+    --resource-group $RESOURCE_GROUP `
+    --settings "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET=$UI_CLIENT_SECRET" | Out-Null
+Write-OK "Client secret stored as app setting"
+
 # Configure Easy Auth V2
 $easyAuthConfig = @{
     platform = @{ enabled = $true }
     globalValidation = @{
-        requireAuthentication     = $true
+        requireAuthentication       = $true
         unauthenticatedClientAction = "RedirectToLoginPage"
     }
     identityProviders = @{
         azureActiveDirectory = @{
             enabled = $true
             registration = @{
-                clientId             = $UI_CLIENT_ID
-                openIdIssuer         = "https://login.microsoftonline.com/$TENANT_ID/v2.0"
+                clientId                    = $UI_CLIENT_ID
+                clientSecretSettingName     = "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET"
+                openIdIssuer                = "https://login.microsoftonline.com/$TENANT_ID/v2.0"
             }
             login = @{
                 loginParameters = @(
@@ -135,7 +148,7 @@ $easyAuthBody = @{ properties = ($easyAuthConfig | ConvertFrom-Json) } | Convert
 az rest --method PUT `
     --uri "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Web/sites/$UI_APP_NAME/config/authsettingsV2?api-version=2022-09-01" `
     --body $easyAuthBody | Out-Null
-Write-OK "Easy Auth configured on $UI_APP_NAME"
+Write-OK "Easy Auth configured on $UI_APP_NAME (clientSecretSettingName wired)"
 
 # ── 5. APIM – API + Operation + Policies ─────────────────────────────────────
 Write-Step "Configuring APIM API and policy"
@@ -291,31 +304,6 @@ Invoke-RestMethod -Method PUT `
     -Body $opPayload | Out-Null
 Write-OK "APIM operation policy (JWT + routing) applied"
 
-# ── 6. GitHub Actions variables ───────────────────────────────────────────────
-Write-Step "Setting GitHub Actions variables"
-
-$vars = @{
-    TENANT_ID            = $TENANT_ID
-    UI_CLIENT_ID         = $UI_CLIENT_ID
-    API_CLIENT_ID        = $API_CLIENT_ID
-    APIM_BASE_URL        = $APIM_GATEWAY
-    UI_APP_SERVICE_NAME  = $UI_APP_NAME
-    API_APP_SERVICE_NAME = $API_APP_NAME
-    RESOURCE_GROUP       = $RESOURCE_GROUP
-    AZURE_TENANT_ID      = $TENANT_ID
-    AZURE_SUBSCRIPTION_ID = $SUBSCRIPTION_ID
-}
-
-foreach ($kv in $vars.GetEnumerator()) {
-    gh variable set $kv.Key --body $kv.Value --repo $GITHUB_REPO 2>$null | Out-Null
-    Write-OK "Set: $($kv.Key)"
-}
-
-# AZURE_CLIENT_ID needs a federated credential – remind user
-Write-Host ""
-Write-Host "  NOTE: AZURE_CLIENT_ID (for OIDC) must be set separately." -ForegroundColor Yellow
-Write-Host "  Run 04-github-oidc.ps1 or set it manually after creating a User-Assigned MI." -ForegroundColor Yellow
-
 # ── Summary ───────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Cyan
@@ -327,5 +315,5 @@ Write-Host "  MI obj ID : $MI_OBJECT_ID"
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "NEXT STEPS:" -ForegroundColor Yellow
-Write-Host "  1. Run: .\deploy\04-deploy.ps1  (triggers GitHub Actions)"
+Write-Host "  1. Run: .\deploy\04-deploy.ps1  (builds and deploys API + UI)"
 Write-Host "  2. After deploy completes, run: .\deploy\05-validate.ps1"

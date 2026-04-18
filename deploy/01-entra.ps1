@@ -168,7 +168,35 @@ if (-not $existing -or $existing.Count -eq 0) {
     Write-OK "Role assignment already exists"
 }
 
-# ── 4. Admin consent ──────────────────────────────────────────────────────────
+# ── 4. UI App client secret (used by Easy Auth) ───────────────────────────────
+Write-Step "UI App client secret for Easy Auth"
+
+# Check if a non-expired secret already exists
+$existingSecrets = az ad app credential list --id $UI_CLIENT_ID | ConvertFrom-Json
+$validSecret = $existingSecrets | Where-Object {
+    [datetime]$_.endDateTime -gt (Get-Date)
+} | Select-Object -First 1
+
+if ($validSecret) {
+    Write-OK "Valid client secret already exists (expires $($validSecret.endDateTime))"
+    Write-Host "  NOTE: The secret value is not retrievable. If Easy Auth is not working," -ForegroundColor Yellow
+    Write-Host "  delete the old secret and re-run this script to create a new one." -ForegroundColor Yellow
+    $UI_CLIENT_SECRET = $null
+} else {
+    $secretResult = az ad app credential reset `
+        --id $UI_CLIENT_ID `
+        --display-name "EasyAuth" `
+        --years 2 `
+        --append | ConvertFrom-Json
+    $UI_CLIENT_SECRET = $secretResult.password
+    Write-OK "Client secret created (expires in 2 years)"
+    Write-Host ""
+    Write-Host "  !! SAVE THIS SECRET — it will not be shown again !!" -ForegroundColor Red
+    Write-Host "  UI_CLIENT_SECRET = $UI_CLIENT_SECRET" -ForegroundColor Yellow
+    Write-Host ""
+}
+
+# ── 5. Admin consent ──────────────────────────────────────────────────────────
 Write-Step "Granting admin consent for UI app permissions"
 az ad app permission admin-consent --id $UI_CLIENT_ID 2>$null | Out-Null
 Write-OK "Admin consent granted (or already granted)"
@@ -177,14 +205,17 @@ Write-OK "Admin consent granted (or already granted)"
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host "ENTRA SETUP COMPLETE" -ForegroundColor Green
-Write-Host "  API_CLIENT_ID  = $API_CLIENT_ID"
-Write-Host "  UI_CLIENT_ID   = $UI_CLIENT_ID"
-Write-Host "  GROUP_OBJECT_ID= $GROUP_OBJECT_ID"
-Write-Host "  App Role ID    = $roleId"
-Write-Host "  Scope ID       = $scopeId"
+Write-Host "  API_CLIENT_ID    = $API_CLIENT_ID"
+Write-Host "  UI_CLIENT_ID     = $UI_CLIENT_ID"
+Write-Host "  GROUP_OBJECT_ID  = $GROUP_OBJECT_ID"
+Write-Host "  App Role ID      = $roleId"
+Write-Host "  Scope ID         = $scopeId"
+if ($UI_CLIENT_SECRET) {
+Write-Host "  UI_CLIENT_SECRET = $UI_CLIENT_SECRET  <-- copy to 03-configure.ps1 or save securely" -ForegroundColor Yellow
+}
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "NEXT STEPS:" -ForegroundColor Yellow
-Write-Host "  1. Copy API_CLIENT_ID and UI_CLIENT_ID into deploy\config.ps1 if they are new"
+Write-Host "  1. Save the UI_CLIENT_SECRET shown above"
 Write-Host "  2. Add yourself (or test user) to the '$OPERATORS_GROUP' group in Entra"
 Write-Host "  3. Run: .\deploy\02-azure.ps1"
