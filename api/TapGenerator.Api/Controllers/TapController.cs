@@ -8,6 +8,7 @@ namespace TapGenerator.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "TapGeneratorRole")]
 public class TapController : ControllerBase
 {
     private static readonly int[] AllowedDurations = [15, 30, 45, 60];

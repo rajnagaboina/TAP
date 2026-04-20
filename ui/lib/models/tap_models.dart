@@ -1,8 +1,15 @@
 class UserInfo {
   final String upn;
   final String displayName;
+  final List<String> roles;
 
-  const UserInfo({required this.upn, required this.displayName});
+  const UserInfo({
+    required this.upn,
+    required this.displayName,
+    required this.roles,
+  });
+
+  bool get isTapGenerator => roles.contains('TAP.Generator');
 
   factory UserInfo.fromClaims(List<dynamic> claims) {
     String find(String type) =>
@@ -10,11 +17,23 @@ class UserInfo {
                 orElse: () => {'val': ''})['val'] as String?) ??
         '';
 
+    // Easy Auth returns roles under either the v2 short name or the v1 full URI
+    const roleClaimTypes = {
+      'roles',
+      'http://schemas.microsoft.com/ws/2008/06/identity/claims/role',
+    };
+    final roles = claims
+        .where((c) => roleClaimTypes.contains(c['typ']))
+        .map<String>((c) => (c['val'] as String?) ?? '')
+        .where((v) => v.isNotEmpty)
+        .toList();
+
     return UserInfo(
       upn: find('preferred_username').isEmpty
           ? find('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn')
           : find('preferred_username'),
       displayName: find('name'),
+      roles: roles,
     );
   }
 }

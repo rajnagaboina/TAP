@@ -13,6 +13,7 @@ class AuthService extends ChangeNotifier {
 
   UserInfo? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
+  bool get isAuthorized => _currentUser?.isTapGenerator ?? false;
 
   Future<void> initAsync() async {
     try {
