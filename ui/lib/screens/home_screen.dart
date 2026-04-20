@@ -14,19 +14,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _upnController = TextEditingController();
   int _selectedDuration = 30;
   bool _isLoading = false;
+  UserSummary? _selectedUser;
+  String? _userFieldError;
 
   final List<int> _durations = [15, 30, 45, 60];
 
-  @override
-  void dispose() {
-    _upnController.dispose();
-    super.dispose();
-  }
-
   Future<void> _submit() async {
+    setState(() => _userFieldError = _selectedUser == null ? 'Please select a user.' : null);
+    if (_selectedUser == null) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -34,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final tapService = TapService(context.read<AuthService>());
       final result = await tapService.generateTap(
-        targetUpn: _upnController.text.trim(),
+        targetUpn: _selectedUser!.upn,
         lifetimeInMinutes: _selectedDuration,
       );
 
@@ -42,12 +39,14 @@ class _HomeScreenState extends State<HomeScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => TapResultScreen(result: result, targetUpn: _upnController.text.trim()),
+          builder: (_) => TapResultScreen(result: result, targetUpn: _selectedUser!.upn),
         ),
       );
-      // Clear the form after returning from result screen
-      _upnController.clear();
-      setState(() => _selectedDuration = 30);
+      setState(() {
+        _selectedUser = null;
+        _selectedDuration = 30;
+        _userFieldError = null;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -64,7 +63,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthService>().currentUser;
+    final auth = context.watch<AuthService>();
+    final user = auth.currentUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -83,9 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
-            onPressed: () {
-              context.read<AuthService>().signOut();
-            },
+            onPressed: () => context.read<AuthService>().signOut(),
           ),
         ],
       ),
@@ -112,25 +110,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 28),
-                    TextFormField(
-                      controller: _upnController,
-                      decoration: const InputDecoration(
-                        labelText: 'Target User (UPN)',
-                        hintText: 'user@yourdomain.com',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Please enter the target user UPN.';
-                        }
-                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v.trim())) {
-                          return 'Enter a valid UPN (e.g. user@domain.com).';
-                        }
-                        return null;
-                      },
+                    _UserSearchField(
+                      selectedUser: _selectedUser,
+                      errorText: _userFieldError,
+                      tapService: TapService(auth),
+                      onSelected: (u) => setState(() {
+                        _selectedUser = u;
+                        _userFieldError = null;
+                      }),
+                      onCleared: () => setState(() {
+                        _selectedUser = null;
+                        _userFieldError = null;
+                      }),
                     ),
                     const SizedBox(height: 20),
                     DropdownButtonFormField<int>(
@@ -168,6 +159,136 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _UserSearchField extends StatefulWidget {
+  final UserSummary? selectedUser;
+  final String? errorText;
+  final TapService tapService;
+  final ValueChanged<UserSummary> onSelected;
+  final VoidCallback onCleared;
+
+  const _UserSearchField({
+    required this.selectedUser,
+    required this.errorText,
+    required this.tapService,
+    required this.onSelected,
+    required this.onCleared,
+  });
+
+  @override
+  State<_UserSearchField> createState() => _UserSearchFieldState();
+}
+
+class _UserSearchFieldState extends State<_UserSearchField> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void didUpdateWidget(_UserSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedUser == null && oldWidget.selectedUser != null) {
+      _controller.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.selectedUser != null) {
+      return InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Target User',
+          prefixIcon: const Icon(Icons.person_outline),
+          border: const OutlineInputBorder(),
+          errorText: widget.errorText,
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Clear selection',
+            onPressed: widget.onCleared,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.selectedUser!.fullName,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            Text(
+              widget.selectedUser!.upn,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Autocomplete<UserSummary>(
+      optionsBuilder: (textEditingValue) async {
+        final q = textEditingValue.text.trim();
+        if (q.length < 2) return const [];
+        try {
+          return await widget.tapService.searchUsers(q);
+        } catch (_) {
+          return const [];
+        }
+      },
+      displayStringForOption: (u) => u.upn,
+      onSelected: (u) {
+        _controller.text = u.upn;
+        widget.onSelected(u);
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(4),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 456, maxHeight: 280),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final u = options.elementAt(index);
+                  return ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(u.fullName),
+                    subtitle: Text(u.upn),
+                    onTap: () => onSelected(u),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: textController,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Target User',
+            hintText: 'Type name or email to search…',
+            prefixIcon: const Icon(Icons.person_outline),
+            border: const OutlineInputBorder(),
+            errorText: widget.errorText,
+          ),
+        );
+      },
     );
   }
 }

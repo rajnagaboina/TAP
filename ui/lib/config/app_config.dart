@@ -7,8 +7,10 @@ class AppConfig {
 
   // TAP Generator API path on APIM
   static const String tapApiPath = '/tap/api/tap';
+  static const String usersSearchApiPath = '/tap/api/users/search';
 
   static String get tapEndpoint => '$apimBaseUrl$tapApiPath';
+  static String get usersSearchEndpoint => '$apimBaseUrl$usersSearchApiPath';
 
   // Entra tenant & app IDs – used to construct the /.auth/token call
   static const String tenantId =

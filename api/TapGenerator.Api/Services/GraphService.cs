@@ -76,6 +76,27 @@ public class GraphService : IGraphService
         }
     }
 
+    public async Task<List<UserSearchResult>> SearchUsersAsync(string query, CancellationToken ct = default)
+    {
+        var result = await _graph.Users.GetAsync(req =>
+        {
+            req.QueryParameters.Search  = $"\"displayName:{query}\" OR \"userPrincipalName:{query}\"";
+            req.QueryParameters.Select  = ["displayName", "givenName", "surname", "userPrincipalName", "accountEnabled"];
+            req.QueryParameters.Top     = 10;
+            req.QueryParameters.Orderby = ["displayName"];
+            req.Headers.Add("ConsistencyLevel", "eventual");
+        }, ct);
+
+        return result?.Value?
+            .Where(u => u.AccountEnabled != false && u.UserPrincipalName != null)
+            .Select(u => new UserSearchResult(
+                u.DisplayName ?? "",
+                u.GivenName ?? "",
+                u.Surname ?? "",
+                u.UserPrincipalName!))
+            .ToList() ?? [];
+    }
+
     public async Task<TapCreationResult> CreateTapAsync(
         string userId, int lifetimeInMinutes, CancellationToken ct = default)
     {

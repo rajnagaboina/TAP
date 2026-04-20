@@ -8,6 +8,26 @@ class TapService {
   final AuthService _auth;
   TapService(this._auth);
 
+  Future<List<UserSummary>> searchUsers(String query) async {
+    final token = await _auth.getAccessTokenAsync();
+    if (token == null) throw Exception('Not authenticated.');
+
+    final uri = Uri.parse(AppConfig.usersSearchEndpoint).replace(
+      queryParameters: {'q': query},
+    );
+    final response = await http.get(uri, headers: {
+      'Authorization': 'Bearer $token',
+    });
+
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((e) => UserSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
   Future<TapResult> generateTap({
     required String targetUpn,
     required int lifetimeInMinutes,

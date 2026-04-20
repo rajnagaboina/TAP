@@ -38,6 +38,32 @@ class UserInfo {
   }
 }
 
+class UserSummary {
+  final String displayName;
+  final String givenName;
+  final String surname;
+  final String upn;
+
+  const UserSummary({
+    required this.displayName,
+    required this.givenName,
+    required this.surname,
+    required this.upn,
+  });
+
+  String get fullName {
+    final name = '${givenName.trim()} ${surname.trim()}'.trim();
+    return name.isNotEmpty ? name : displayName;
+  }
+
+  factory UserSummary.fromJson(Map<String, dynamic> json) => UserSummary(
+        displayName: (json['displayName'] ?? '') as String,
+        givenName: (json['givenName'] ?? '') as String,
+        surname: (json['surname'] ?? '') as String,
+        upn: (json['upn'] ?? '') as String,
+      );
+}
+
 class TapResult {
   final String temporaryAccessPass;
   final int lifetimeInMinutes;

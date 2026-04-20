@@ -203,6 +203,7 @@ $corsPolicy = @"
         <origin>$uiOrigin</origin>
       </allowed-origins>
       <allowed-methods preflight-result-max-age="300">
+        <method>GET</method>
         <method>POST</method>
         <method>OPTIONS</method>
       </allowed-methods>
@@ -301,7 +302,34 @@ Invoke-RestMethod -Method PUT `
     -Headers @{ Authorization = "Bearer $TOKEN" } `
     -ContentType "application/json" `
     -Body $opPayload | Out-Null
-Write-OK "APIM operation policy (JWT + routing) applied"
+Write-OK "APIM operation policy (JWT + routing) applied for create-tap"
+
+# Create search-users operation
+$searchOpExists = az apim api operation show `
+    --service-name $APIM_NAME `
+    --resource-group $RESOURCE_GROUP `
+    --api-id "tap-generator" `
+    --operation-id "search-users" 2>$null | ConvertFrom-Json
+if (-not $searchOpExists) {
+    az apim api operation create `
+        --service-name $APIM_NAME `
+        --resource-group $RESOURCE_GROUP `
+        --api-id "tap-generator" `
+        --operation-id "search-users" `
+        --display-name "Search Users" `
+        --method GET `
+        --url-template "/api/users/search" | Out-Null
+    Write-OK "APIM search-users operation created"
+} else {
+    Write-OK "APIM search-users operation already exists"
+}
+
+Invoke-RestMethod -Method PUT `
+    -Uri "$base/apis/tap-generator/operations/search-users/policies/policy?api-version=2022-08-01" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -ContentType "application/json" `
+    -Body $opPayload | Out-Null
+Write-OK "APIM operation policy (JWT + routing) applied for search-users"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 Write-Host ""
