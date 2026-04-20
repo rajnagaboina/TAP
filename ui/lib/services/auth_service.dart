@@ -54,6 +54,10 @@ class AuthService extends ChangeNotifier {
     _currentUser = null;
     _accessToken = null;
     notifyListeners();
-    web.window.location.replace('/.auth/logout?post_logout_redirect_uri=/');
+    // After clearing the Easy Auth session, redirect to login with prompt=select_account
+    // so Microsoft always shows the account picker instead of silently reusing the SSO session.
+    web.window.location.replace(
+      '/.auth/logout?post_logout_redirect_uri=${Uri.encodeComponent('/.auth/login/aad?prompt=select_account&post_login_redirect_url=/')}',
+    );
   }
 }

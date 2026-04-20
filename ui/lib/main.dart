@@ -118,7 +118,7 @@ class _AccessDeniedScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'To gain access, ask your administrator to add your account to the SG-IAM-TAP-Generators security group.',
+                    'To gain access, Contact your IAM Support Team.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
