@@ -49,3 +49,119 @@ jobs:
         with:
           app-name: ${{ vars.API_APP_SERVICE_NAME }}
           package: api/TapGenerator.Api/publish
+
+      - name: Configure APIM (search-users operation + CORS GET)
+        env:
+          TENANT_ID: ${{ vars.TENANT_ID }}
+          API_CLIENT_ID: ${{ vars.API_CLIENT_ID }}
+          APIM_BASE_URL: ${{ vars.APIM_BASE_URL }}
+          API_APP_NAME: ${{ vars.API_APP_SERVICE_NAME }}
+          UI_APP_NAME: ${{ vars.UI_APP_SERVICE_NAME }}
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -e
+
+          APIM_NAME=$(echo "$APIM_BASE_URL" | sed 's|https://||' | cut -d'.' -f1)
+          RG=$(az webapp show --name "$API_APP_NAME" --query resourceGroup -o tsv)
+          API_BACKEND="https://${API_APP_NAME}.azurewebsites.net"
+          UI_ORIGIN="https://${UI_APP_NAME}.azurewebsites.net"
+          BASE="https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_NAME}"
+          TOKEN=$(az account get-access-token --resource "https://management.azure.com/" --query accessToken -o tsv)
+
+          # Create search-users operation (idempotent)
+          az apim api operation show \
+            --service-name "$APIM_NAME" --resource-group "$RG" \
+            --api-id "tap-generator" --operation-id "search-users" 2>/dev/null || \
+          az apim api operation create \
+            --service-name "$APIM_NAME" --resource-group "$RG" \
+            --api-id "tap-generator" --operation-id "search-users" \
+            --display-name "Search Users" --method GET \
+            --url-template "/api/users/search"
+
+          echo "search-users operation ready"
+
+          # Write operation policy XML
+          cat > /tmp/op-policy.xml << XMLEOF
+          <policies>
+            <inbound>
+              <base />
+              <validate-jwt header-name="Authorization"
+                            failed-validation-httpcode="401"
+                            failed-validation-error-message="Unauthorized: valid Bearer token with TAP.Generator role required."
+                            require-expiration-time="true"
+                            require-signed-tokens="true">
+                <openid-config url="https://login.microsoftonline.com/${TENANT_ID}/v2.0/.well-known/openid-configuration" />
+                <audiences>
+                  <audience>${API_CLIENT_ID}</audience>
+                  <audience>api://${API_CLIENT_ID}</audience>
+                </audiences>
+                <issuers>
+                  <issuer>https://login.microsoftonline.com/${TENANT_ID}/v2.0</issuer>
+                  <issuer>https://sts.windows.net/${TENANT_ID}/</issuer>
+                </issuers>
+                <required-claims>
+                  <claim name="roles" match="any" separator=" ">
+                    <value>TAP.Generator</value>
+                  </claim>
+                </required-claims>
+              </validate-jwt>
+              <set-backend-service base-url="${API_BACKEND}" />
+              <set-header name="X-Request-Id" exists-action="skip">
+                <value>@(Guid.NewGuid().ToString())</value>
+              </set-header>
+            </inbound>
+            <backend><base /></backend>
+            <outbound>
+              <base />
+              <set-header name="X-Powered-By" exists-action="delete" />
+              <set-header name="Server" exists-action="delete" />
+            </outbound>
+            <on-error>
+              <base />
+              <return-response>
+                <set-status code="401" reason="Unauthorized" />
+                <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                <set-body>{"error":"Unauthorized"}</set-body>
+              </return-response>
+            </on-error>
+          </policies>
+          XMLEOF
+
+          jq -n --rawfile v /tmp/op-policy.xml '{"properties":{"format":"rawxml","value":$v}}' > /tmp/op-payload.json
+          curl -sf -X PUT \
+            "${BASE}/apis/tap-generator/operations/search-users/policies/policy?api-version=2022-08-01" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/op-payload.json
+          echo "search-users policy applied"
+
+          # Update API-level CORS policy to include GET
+          cat > /tmp/cors-policy.xml << XMLEOF
+          <policies>
+            <inbound>
+              <cors allow-credentials="true">
+                <allowed-origins><origin>${UI_ORIGIN}</origin></allowed-origins>
+                <allowed-methods preflight-result-max-age="300">
+                  <method>GET</method>
+                  <method>POST</method>
+                  <method>OPTIONS</method>
+                </allowed-methods>
+                <allowed-headers>
+                  <header>Authorization</header>
+                  <header>Content-Type</header>
+                </allowed-headers>
+              </cors>
+            </inbound>
+            <backend><base /></backend>
+            <outbound><base /></outbound>
+            <on-error><base /></on-error>
+          </policies>
+          XMLEOF
+
+          jq -n --rawfile v /tmp/cors-policy.xml '{"properties":{"format":"rawxml","value":$v}}' > /tmp/cors-payload.json
+          curl -sf -X PUT \
+            "${BASE}/apis/tap-generator/policies/policy?api-version=2022-08-01" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/cors-payload.json
+          echo "CORS policy updated (GET added)"
