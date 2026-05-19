@@ -41,4 +41,3 @@ if (-not $SUBSCRIPTION_ID) { throw "config.ps1: SUBSCRIPTION_ID is empty." }
 if (-not $RESOURCE_GROUP)  { throw "config.ps1: RESOURCE_GROUP is empty." }
 if (-not $LOCATION)        { throw "config.ps1: LOCATION is empty." }
 if (-not $APIM_EMAIL)      { throw "config.ps1: APIM_EMAIL is empty." }
-if (-not $GITHUB_REPO)     { throw "config.ps1: GITHUB_REPO is empty (format: owner/repo)." }
